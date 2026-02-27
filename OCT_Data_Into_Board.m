@@ -5,8 +5,8 @@
 %octData = load("C:\Users\Harin\OneDrive\Capstone\synthetic_interferograms.mat", 'interferograms');
 octData = load("C:\Users\Harin\OneDrive\Capstone\768_synthetic_interferograms_bij.mat", 'interferograms');
 interferograms = octData.interferograms;
-data_bytes = typecast(interferograms, 'int32');
-
+%data_bytes = typecast(interferograms, 'int32'); %First argument must be a vector or empty. (typecast only accepts vectors)
+data_bytes = int32(interferograms);
 
 %  Open a UDP port on the PC
 %The udpport object allows you to perform byte-type and datagram-type UDP communication using a UDP socket on the local host.
@@ -80,3 +80,39 @@ end
 
 
   %% make the CALIBRATION packet for background subtraction (this should change per each scan so we need to send it via a loop?)
+
+
+signal_length = %get length of file data is coming from
+
+% DEFINE SAMPLING GRIDS
+%make sure to run once
+tvec = (0:signal_length-1)';
+kclk = 0.05 * rand(signal_length,1) - 0.025;
+kclk = tvec + kclk;
+kclk(1) = 0;
+
+for i = 1:768
+
+
+   scan = data_bytes(i,:); %go through all samples in each row (each A scan)
+
+    %make the DATA packet
+    header = int16(4095); %start marker to say "this is the start of a packet"
+    Message_Type = int8(0); %To say this is data packet or a calibration packet (0 for data, 1 for calib) int8 = holds 1 byte which is 0 - 255
+    ScanNumber = int16(i); %1st A-scan? 2nd A-scan? etc
+    NumberofSamples = int16(length(scan)); %should ve 512 samples per A scan (the number of samples for that A scan)
+
+mybg = 100000 * sin(tvec * 0.003);
+
+    Data = int16(mybg); %the background noise
+    Close = int16(32767);
+    
+    %Packet structure
+    Data_packet = [header, Message_Type, ScanNumber, NumberofSamples, Data, Close]; 
+
+  %sending the DATA packet via ethernet
+  write(u, Data_packet, fpga_ip, fpga_port);
+
+  % Display a message indicating the completion of the current scan
+   disp(['Scan ', num2str(i), ' yaaas']);
+end
