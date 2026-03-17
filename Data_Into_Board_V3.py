@@ -3,6 +3,7 @@ import socket
 import struct
 import time
 import numpy as np # so we can convert to ints
+import glob
 
 
 '''
@@ -14,10 +15,6 @@ print('combined bytes is:')
 print(combined_bytes)
 
 '''
-
-
-
-
 
 #Open UDP port
 FPGA_IP = "192.168.10.50" # replace with FPGA IP
@@ -164,63 +161,67 @@ def send_row_and_receive_reply(sock, row_id: int, row_samples):
 
 
 def main():
-
-        
+    
     # load the data
     #r treats backslashes literally
-    mat_data = scipy.io.loadmat(r"C:\Users\Harin\OneDrive\Capstone\forward_pipeline_outputs_scaled_000.mat")  
-    #get the real data and the imaginary data from the file
-    real_data = mat_data['raw_signals_real']      
-    complex_data = mat_data['raw_signals_im']
-
-    #convert to int32
-    data_bytes = real_data.astype(np.int32) #does data_bytes = typecast(interferograms, 'int32');
-    data_complex_bytes = complex_data.astype(np.int32)
-
-    #print(data_bytes + data_complex_bytes)
-    #doing shape (A scans, num of samples, 2) --> to get them in pairs as (real and imaginary)
-    combined_bytes = np.stack((data_bytes, data_complex_bytes), axis = -1) #use axis = -1 to add another dimension so u can do pairs per element https://numpy.org/doc/stable/reference/generated/numpy.stack.html
-
-    num_scans = combined_bytes.shape[0] #get the first dimension of the combined bytes data which is number of rows or A scans we have which is 768
-
-    #row_samples = make_test_row() # size (512, 2), re and im
-    #now instead of using test data send the actual data
-
-
+    files = sorted(glob.glob(r"C:\Users\Harin\OneDrive\Capstone\forward_pipeline_outputs_scaled*.mat"))
+    
     #OPEN THe UDP Socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     # The arguments passed to socket() are constants used to specify the address family and socket type.
     # AF_INET is the Internet address family for IPv4. SOCK_STREAM is the socket type for TCP (it is SOCK_DGRAM FOR UDP!!!), the protocol that will be used to transport messages in the network.
-    
-    
-    #sock.bind((PC_BIND_IP, PC_BIND_PORT)) ---> OSError: [WinError 10048] Only one usage of each socket address (protocol/network address/port) is normally permitted
+       
+       
+    #sock.bind((PC_BIND_IP, PC_BIND_PORT)) # OSError: [WinError 10048] Only one usage of each socket address (protocol/network address/port) is normally permitted
 
 
-    for row_id in range(num_scans):
-        row_samples =combined_bytes[row_id]
-        replies = send_row_and_receive_reply(sock, row_id, row_samples)
-        print()
-        print(f"Received {len(replies)}/{PACKETS_PER_ROW} reply packets")
-        print()
 
+    #print("Files found:", files)
+    for file in files:
+        print("File opened", file)
+
+        #load the tile
+        mat_data = scipy.io.loadmat(file) #mat_data = scipy.io.loadmat(r"C:\Users\Harin\OneDrive\Capstone\forward_pipeline_outputs_scaled_000.mat")  
+        
+        #get the real data and the imaginary data from the file
+        real_data = mat_data['raw_signals_real']      
+        complex_data = mat_data['raw_signals_im']
+
+
+        #convert to int32
+        data_bytes = real_data.astype(np.int32) #does data_bytes = typecast(interferograms, 'int32');
+        data_complex_bytes = complex_data.astype(np.int32)
+
+
+        #print(data_bytes + data_complex_bytes)
+        #doing shape (A scans, num of samples, 2) --> to get them in pairs as (real and imaginary)
+        combined_bytes = np.stack((data_bytes, data_complex_bytes), axis = -1) #use axis = -1 to add another dimension so u can do pairs per element https://numpy.org/doc/stable/reference/generated/numpy.stack.html
+        #get number of scans
+        print("combined_bytes shape:", combined_bytes.shape)
+        num_scans = combined_bytes.shape[0] #get the first dimension of the combined bytes data which is number of rows or A scans we have which is 768
+
+        #FOR THIS FILE, SEND EACH ROW IN THE BATCHES 
+        for row_id in range(num_scans):
+                row_samples =combined_bytes[row_id]
+                replies = send_row_and_receive_reply(sock, row_id, row_samples)
+                print()
+                print(f"Received {len(replies)}/{PACKETS_PER_ROW} reply packets")
+                print()
+
+            
     print(f"Bound PC UDP socket to {PC_BIND_IP}:{PC_BIND_PORT}")
     print(f"Sending to FPGA at {FPGA_IP}:{FPGA_PORT}")
 
-    
-
-  
 
     for batch_id in sorted(replies.keys()):
-        pkt = replies[batch_id]
-        first_two = pkt["samples"][:2]
-        print(f"Reply batch {batch_id}: row={pkt['row_id']}, first samples={first_two}")
+            pkt = replies[batch_id]
+            first_two = pkt["samples"][:2]
+            print(f"Reply batch {batch_id}: row={pkt['row_id']}, first samples={first_two}")
+
 
     if len(replies) != PACKETS_PER_ROW:
-        print("\nDid not receive full 4-packet reply.")
+            print("\nDid not receive full 4-packet reply.")
 
 
 if __name__ == "__main__":
-    main()
-
-
-    
+        main()
