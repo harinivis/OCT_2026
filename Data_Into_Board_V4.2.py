@@ -184,9 +184,6 @@ def main():
         # read raw data
         real_data = np.fromfile(file, dtype="<i4")  # int32 little-endian
 
-    # optional: convert to int32 (already int32 from fromfile, so not strictly needed)
-        data_bytes = real_data.astype(np.int32)
-
     # split into rows of ROW_SAMPLES
         rows = real_data.reshape(768, 1024)
 
